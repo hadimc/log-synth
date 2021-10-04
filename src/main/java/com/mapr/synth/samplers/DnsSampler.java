@@ -109,6 +109,7 @@ public class DnsSampler extends FieldSampler {
     private double sunriseTime = base.nextDouble() * Util.ONE_DAY;
     private double sunsetTime = sunriseTime < NIGHT_DURATION ? sunriseTime - NIGHT_DURATION + Util.ONE_DAY : sunriseTime - NIGHT_DURATION;
 
+    private boolean includeQuery = true;
     private boolean isDaytime = sunriseTime > NIGHT_DURATION;
     private Set<String> legalFields = ImmutableSet.of(
             "ip", "ipx", "ipV4", "domain", "revDomain", "time", "timestamp_ms", "timestamp_s");
@@ -137,6 +138,14 @@ public class DnsSampler extends FieldSampler {
             }
         };
         restart();
+    }
+
+    public boolean isIncludeQuery() {
+        return includeQuery;
+    }
+
+    public void setIncludeQuery(boolean includeQuery) {
+        this.includeQuery = includeQuery;
     }
 
     enum Event {
@@ -365,41 +374,45 @@ public class DnsSampler extends FieldSampler {
         }
 
 
-        ArrayNode queries = new ArrayNode(factory);
+        if (isIncludeQuery()) {
+            ArrayNode queries = new ArrayNode(factory);
 
-        Event step;
-        do {
-            step = step();
-            if (step == Event.QUERY) {
-                ObjectNode q = new ObjectNode(factory);
-                String domain = domainDistribution.sample();
-                q.set("domain", new TextNode(domain));
-                List<String> parts = Arrays.asList(domain.split("\\."));
-                Collections.reverse(parts);
-                String reversed = String.join(".", parts);
-                q.set("revDomain", new TextNode(reversed));
-                q.set("time", new TextNode(df.format((long) now)));
-                q.set("timestamp_ms", new LongNode((long) now));
-                q.set("timestamp_s", new LongNode((long) (now / 1000)));
-                if (retainedFields != null) {
-                    q.retain(retainedFields);
+            Event step;
+            do {
+                step = step();
+                if (step == Event.QUERY) {
+                    ObjectNode q = new ObjectNode(factory);
+                    String domain = domainDistribution.sample();
+                    q.set("domain", new TextNode(domain));
+                    List<String> parts = Arrays.asList(domain.split("\\."));
+                    Collections.reverse(parts);
+                    String reversed = String.join(".", parts);
+                    q.set("revDomain", new TextNode(reversed));
+                    q.set("time", new TextNode(df.format((long) now)));
+                    q.set("timestamp_ms", new LongNode((long) now));
+                    q.set("timestamp_s", new LongNode((long) (now / 1000)));
+                    if (retainedFields != null) {
+                        q.retain(retainedFields);
+                    }
+                    queries.add(q);
                 }
-                queries.add(q);
-            }
-        } while (step != Event.END);
+            } while (step != Event.END);
 
-        if (!isFlat()) {
-            r.set("queries", queries);
-            return r;
+            if (!isFlat()) {
+                r.set("queries", queries);
+                return r;
+            } else {
+                ArrayNode flattened = new ArrayNode(factory);
+                for (JsonNode q : queries) {
+                    ObjectNode x = r.deepCopy();
+                    x.setAll((ObjectNode) q);
+                    flattened.add(x);
+                }
+
+                return flattened;
+            }
         } else {
-            ArrayNode flattened = new ArrayNode(factory);
-            for (JsonNode q : queries) {
-                ObjectNode x = r.deepCopy();
-                x.setAll((ObjectNode) q);
-                flattened.add(x);
-            }
-
-            return flattened;
+            return r;
         }
     }
 }
