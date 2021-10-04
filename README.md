@@ -458,7 +458,7 @@ time.  Here are some examples:
       // generates lists with 5-10 samples in each
       "name": "fixed-length",
       "class":"sequence",
-      "lengthDistribution":{"class":"integer", "min":5, "max":10},
+      "lengthDistribution":{"class":"int", "min":5, "max":10},
       "base": {
         // insert sampler definition here
       }
@@ -1093,7 +1093,7 @@ Then a schema file, let’s call it schema.txt:
 ```
 To invoke the log-synth, just do:
 
-./target/log-synth -count 5000 -schema schema.txt -template template.txt -format TEMPLATE -output output/
+./target/log-synth -count 5000 -schema schema.txt -template template.txt -format CSV -output output/
 
 The output documents will end up in the output/ folder as expected and they will look like:
 ```
