@@ -20,8 +20,15 @@
 package com.mapr.synth.samplers;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
+import com.google.common.base.Splitter;
+import java.util.regex.Pattern;
+import com.google.common.collect.ImmutableSet;
+
 import freemarker.cache.ClassTemplateLoader;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
@@ -32,11 +39,14 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Sample a list of headers in the style of those that might accompany a web request
  */
 public class HeaderSampler extends FieldSampler {
+    private JsonNodeFactory factory = JsonNodeFactory.withExactBigDecimals(false);
+    private Set<String> retainedFields = null;
 
     private Template template;
     private String prolog;
@@ -48,6 +58,9 @@ public class HeaderSampler extends FieldSampler {
         MAL2,
         MAL3
     }
+
+    private Set<String> legalFields = ImmutableSet.of(
+            "url", "host", "accept", "userAgent", "language", "encoding", "referer");
 
     private Type headerType = Type.NORMAL;
 
@@ -67,6 +80,19 @@ public class HeaderSampler extends FieldSampler {
     public void setType(String headerType) throws IOException {
         this.headerType = Type.valueOf(headerType.toUpperCase());
         setupTemplate();
+    }
+
+    /**
+     * Limits the fields that are returned to only those that are specified.
+     */
+    @SuppressWarnings("UnusedDeclaration")
+    public void setFields(String fields) {
+        retainedFields = Sets.newHashSet(Splitter.on(Pattern.compile("[\\s,;]+")).split(fields));
+        for (String field : retainedFields) {
+            if (!legalFields.contains(field)) {
+                throw new IllegalArgumentException(String.format("Unknown field name: %s", field));
+            }
+        }
     }
 
     @SuppressWarnings("unused")
@@ -156,6 +182,18 @@ public class HeaderSampler extends FieldSampler {
     @Override
     public JsonNode sample() {
         boolean isImage = gen.nextDouble() < 0.3;
+        if (retainedFields != null) {
+            ObjectNode r = new ObjectNode(factory);
+            r.set("url", new TextNode(url(isImage)));
+            r.set("host", new TextNode(String.format("x%03d.foo.com", gen.nextInt(5))));
+            r.set("accept", new TextNode(accept(isImage)));
+            r.set("userAgent", new TextNode(userAgent()));
+            r.set("language", new TextNode(language()));
+            r.set("encoding", new TextNode(encoding()));
+            r.set("referer", new TextNode(url(false)));                        
+            return r;
+        }
+
         Map<String, String> params = ImmutableMap.<String, String>builder()
                 .put("url", url(isImage))
                 .put("host", String.format("x%03d.foo.com", gen.nextInt(5)))
